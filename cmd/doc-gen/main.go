@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/bio-routing/matroschka-prober/pkg/config"
 	"github.com/projectdiscovery/yamldoc-go/encoder"
-	"github.com/exaring/matroschka-prober/pkg/config"
 )
 
 func main() {

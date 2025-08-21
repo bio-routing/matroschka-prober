@@ -1,4 +1,4 @@
-module github.com/exaring/matroschka-prober
+module github.com/bio-routing/matroschka-prober
 
 go 1.19
 

@@ -46,7 +46,7 @@ func (fe *Frontend) Start() {
 			<h1>Matroschka Prober</h1>
 			<p><a href="` + fe.cfg.MetricsPath + `">Metrics</a></p>
 			<h2>More information:</h2>
-			<p><a href="https://github.com/exaring/matroschka-prober">github.com/exaring/matroschka-prober</a></p>
+			<p><a href="https://github.com/bio-routing/matroschka-prober">github.com/bio-routing/matroschka-prober</a></p>
 			</body>
 			</html>`))
 	})

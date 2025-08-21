@@ -6,7 +6,7 @@ import (
 	"net"
 	"net/netip"
 
-	"github.com/exaring/matroschka-prober/pkg/prober"
+	"github.com/bio-routing/matroschka-prober/pkg/prober"
 	"github.com/pkg/errors"
 )
 

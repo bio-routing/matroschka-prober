@@ -6,7 +6,7 @@ import (
 	"slices"
 	"time"
 
-	"github.com/exaring/matroschka-prober/pkg/measurement"
+	"github.com/bio-routing/matroschka-prober/pkg/measurement"
 	"github.com/google/gopacket"
 )
 
