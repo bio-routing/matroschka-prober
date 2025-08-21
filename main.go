@@ -7,9 +7,9 @@ import (
 
 	"gopkg.in/yaml.v2"
 
-	"github.com/exaring/matroschka-prober/pkg/config"
-	"github.com/exaring/matroschka-prober/pkg/frontend"
-	"github.com/exaring/matroschka-prober/pkg/probermanager"
+	"github.com/bio-routing/matroschka-prober/pkg/config"
+	"github.com/bio-routing/matroschka-prober/pkg/frontend"
+	"github.com/bio-routing/matroschka-prober/pkg/probermanager"
 	log "github.com/sirupsen/logrus"
 	inotify "gopkg.in/fsnotify.v1"
 

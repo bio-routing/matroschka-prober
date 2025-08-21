@@ -3,7 +3,7 @@ package probermanager
 import (
 	"testing"
 
-	"github.com/exaring/matroschka-prober/pkg/prober"
+	"github.com/bio-routing/matroschka-prober/pkg/prober"
 	"github.com/stretchr/testify/assert"
 )
 

@@ -47,6 +47,7 @@ For IPv6, the string must have the format [<address>]:port.
 <div class="dt">
 
 Base port used to listen for returned packets. If multiple paths are defined, each will take the next available port starting from <base_port>.
+If you want to listen on any IPv4 address, you can use the :<port> form. For IPv6, you must use [::]:<port>.
 
 </div>
 
@@ -186,9 +187,10 @@ Amount of probing packets that will be sent per second.
 <div class="dt">
 
 Range of IP addresses used as a source for the package. Useful to add some variance in the parameters used to hash the packets in ECMP scenarios
-Defaults to 169.254.0.0/16 for IPv4 and fe80::/112 for IPv6
+Defaults to 169.254.0.0/16 for IPv4 and fc00::/112 for IPv6
 The maximum allowed range is 2^16 addresses (/16 mask in IPv4 and /112 mask in IPv6)
 For IPv6, all ip addresses specified here *must* be also configured in the system.
+If you are defining multiple paths, some which use IPv4 and some with IPv6, you must define the src_range for each router separately
 
 </div>
 
@@ -355,6 +357,19 @@ Amount of probing packets that will be sent per second.
 <div class="dt">
 
 Timeout expressed in milliseconds.
+
+</div>
+
+<hr />
+
+<div class="dd">
+
+<code>labels</code>  <i>map[string]string</i>
+
+</div>
+<div class="dt">
+
+custom labels to expose
 
 </div>
 

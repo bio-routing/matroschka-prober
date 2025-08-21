@@ -34,7 +34,7 @@ func init() {
 	ConfigDoc.Fields[2].Name = "base_port"
 	ConfigDoc.Fields[2].Type = "uint16"
 	ConfigDoc.Fields[2].Note = ""
-	ConfigDoc.Fields[2].Description = "Base port used to listen for returned packets. If multiple paths are defined, each will take the next available port starting from <base_port>."
+	ConfigDoc.Fields[2].Description = "Base port used to listen for returned packets. If multiple paths are defined, each will take the next available port starting from <base_port>.\nIf you want to listen on any IPv4 address, you can use the :<port> form. For IPv6, you must use [::]:<port>."
 	ConfigDoc.Fields[2].Comments[encoder.LineComment] = "Base port used to listen for returned packets. If multiple paths are defined, each will take the next available port starting from <base_port>."
 	ConfigDoc.Fields[3].Name = "defaults"
 	ConfigDoc.Fields[3].Type = "Defaults"
@@ -90,7 +90,7 @@ func init() {
 	DefaultsDoc.Fields[3].Name = "src_range"
 	DefaultsDoc.Fields[3].Type = "string"
 	DefaultsDoc.Fields[3].Note = ""
-	DefaultsDoc.Fields[3].Description = "Range of IP addresses used as a source for the package. Useful to add some variance in the parameters used to hash the packets in ECMP scenarios\nDefaults to 169.254.0.0/16 for IPv4 and fe80::/112 for IPv6\nThe maximum allowed range is 2^16 addresses (/16 mask in IPv4 and /112 mask in IPv6)\nFor IPv6, all ip addresses specified here *must* be also configured in the system."
+	DefaultsDoc.Fields[3].Description = "Range of IP addresses used as a source for the package. Useful to add some variance in the parameters used to hash the packets in ECMP scenarios\nDefaults to 169.254.0.0/16 for IPv4 and fc00::/112 for IPv6\nThe maximum allowed range is 2^16 addresses (/16 mask in IPv4 and /112 mask in IPv6)\nFor IPv6, all ip addresses specified here *must* be also configured in the system.\nIf you are defining multiple paths, some which use IPv4 and some with IPv6, you must define the src_range for each router separately"
 	DefaultsDoc.Fields[3].Comments[encoder.LineComment] = "Range of IP addresses used as a source for the package. Useful to add some variance in the parameters used to hash the packets in ECMP scenarios"
 	DefaultsDoc.Fields[4].Name = "timeout"
 	DefaultsDoc.Fields[4].Type = "uint64"
@@ -133,7 +133,7 @@ func init() {
 			FieldName: "paths",
 		},
 	}
-	PathDoc.Fields = make([]encoder.Doc, 6)
+	PathDoc.Fields = make([]encoder.Doc, 7)
 	PathDoc.Fields[0].Name = "name"
 	PathDoc.Fields[0].Type = "string"
 	PathDoc.Fields[0].Note = ""
@@ -164,6 +164,11 @@ func init() {
 	PathDoc.Fields[5].Note = ""
 	PathDoc.Fields[5].Description = "Timeout expressed in milliseconds."
 	PathDoc.Fields[5].Comments[encoder.LineComment] = "Timeout expressed in milliseconds."
+	PathDoc.Fields[6].Name = "labels"
+	PathDoc.Fields[6].Type = "map[string]string"
+	PathDoc.Fields[6].Note = ""
+	PathDoc.Fields[6].Description = "custom labels to expose"
+	PathDoc.Fields[6].Comments[encoder.LineComment] = "custom labels to expose"
 
 	RouterDoc.Type = "Router"
 	RouterDoc.Comments[encoder.LineComment] = "Router represents a router used a an explicit hop in a path"

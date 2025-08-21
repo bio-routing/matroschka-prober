@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/exaring/matroschka-prober/pkg/config"
-	"github.com/exaring/matroschka-prober/pkg/prober"
+	"github.com/bio-routing/matroschka-prober/pkg/config"
+	"github.com/bio-routing/matroschka-prober/pkg/prober"
 	"github.com/prometheus/client_golang/prometheus"
 
 	log "github.com/sirupsen/logrus"

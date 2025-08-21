@@ -4,7 +4,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/exaring/matroschka-prober/pkg/measurement"
+	"github.com/bio-routing/matroschka-prober/pkg/measurement"
 	"github.com/prometheus/client_golang/prometheus"
 	log "github.com/sirupsen/logrus"
 )
