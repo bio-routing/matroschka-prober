@@ -13,6 +13,15 @@ const (
 	ttl = 64
 )
 
+var (
+	ipv4inGRE = &layers.GRE{
+		Protocol: layers.EthernetTypeIPv4,
+	}
+	ipv6inGRE = &layers.GRE{
+		Protocol: layers.EthernetTypeIPv6,
+	}
+)
+
 func (p *Prober) getSrcAddrHop(hop int, seq uint64) net.IP {
 	return p.cfg.Hops[hop-1].SrcRange[seq%uint64(len(p.cfg.Hops[hop-1].SrcRange))]
 }
@@ -46,9 +55,7 @@ func (p *Prober) getIPVersion() (int8, error) {
 }
 
 func (p *Prober) craftIPV4Packet(sequenceNumber uint64, l []gopacket.SerializableLayer) ([]gopacket.SerializableLayer, error) {
-	l = append(l, &layers.GRE{
-		Protocol: layers.EthernetTypeIPv4,
-	})
+	l = append(l, ipv4inGRE)
 
 	for i := range p.cfg.Hops {
 		if i == 0 {
@@ -64,9 +71,7 @@ func (p *Prober) craftIPV4Packet(sequenceNumber uint64, l []gopacket.Serializabl
 			TTL:      ttl,
 		})
 
-		l = append(l, &layers.GRE{
-			Protocol: layers.EthernetTypeIPv4,
-		})
+		l = append(l, ipv4inGRE)
 	}
 
 	// Create final UDP packet that will return
@@ -95,9 +100,7 @@ func (p *Prober) craftIPV4Packet(sequenceNumber uint64, l []gopacket.Serializabl
 }
 
 func (p *Prober) craftIPV6Packet(sequenceNumber uint64, l []gopacket.SerializableLayer) ([]gopacket.SerializableLayer, error) {
-	l = append(l, &layers.GRE{
-		Protocol: layers.EthernetTypeIPv6,
-	})
+	l = append(l, ipv6inGRE)
 
 	for i := range p.cfg.Hops {
 		if i == 0 {
@@ -113,9 +116,7 @@ func (p *Prober) craftIPV6Packet(sequenceNumber uint64, l []gopacket.Serializabl
 			HopLimit:     ttl,
 		})
 
-		l = append(l, &layers.GRE{
-			Protocol: layers.EthernetTypeIPv6,
-		})
+		l = append(l, ipv6inGRE)
 
 	}
 
@@ -152,7 +153,8 @@ func (p *Prober) craftPacket(pr probe) ([]byte, error) {
 		ComputeChecksums: true,
 	}
 
-	l := make([]gopacket.SerializableLayer, 0, (len(p.cfg.Hops)-1)*2+5)
+	lp := p.serializableLayerPool.Get().(*[]gopacket.SerializableLayer)
+	l := *lp
 
 	var err error
 	ipProtocolVersion := p.cfg.IPVersion
@@ -175,8 +177,11 @@ func (p *Prober) craftPacket(pr probe) ([]byte, error) {
 
 	err = gopacket.SerializeLayers(buf, opts, l...)
 	if err != nil {
-		return nil, fmt.Errorf("Unable to serialize layers: %v", err)
+		return nil, fmt.Errorf("unable to serialize layers: %v", err)
 	}
+
+	l = l[:0]
+	p.serializableLayerPool.Put(&l)
 
 	return buf.Bytes(), nil
 }

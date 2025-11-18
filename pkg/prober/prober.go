@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net"
 	"slices"
+	"sync"
 	"time"
 
 	"github.com/bio-routing/matroschka-prober/pkg/measurement"
@@ -16,20 +17,21 @@ const (
 
 // Prober keeps the state of a prober instance. There is one instance per probed path.
 type Prober struct {
-	cfg            Config
-	dstUDPPort     uint16
-	localAddr      net.IP
-	clock          clock
-	mtu            uint16
-	payload        gopacket.Payload
-	probesReceived uint64
-	probesSent     uint64
-	rawConn        rawSocket // Used to send GRE packets
-	stop           chan struct{}
-	transitProbes  *transitProbes // Keeps track of in-flight packets
-	udpConn        udpSocket      // Used to receive returning packets
-	measurements   *measurement.MeasurementsDB
-	latePackets    uint64
+	cfg                   Config
+	dstUDPPort            uint16
+	localAddr             net.IP
+	clock                 clock
+	mtu                   uint16
+	payload               gopacket.Payload
+	probesReceived        uint64
+	probesSent            uint64
+	rawConn               rawSocket // Used to send GRE packets
+	stop                  chan struct{}
+	transitProbes         *transitProbes // Keeps track of in-flight packets
+	udpConn               udpSocket      // Used to receive returning packets
+	measurements          *measurement.MeasurementsDB
+	latePackets           uint64
+	serializableLayerPool sync.Pool
 }
 
 // Config is the configuration of a prober
@@ -103,6 +105,12 @@ func New(c Config) *Prober {
 		measurements:  measurement.NewDB(),
 		stop:          make(chan struct{}),
 		payload:       make(gopacket.Payload, c.PayloadSizeBytes),
+		serializableLayerPool: sync.Pool{
+			New: func() any {
+				x := make([]gopacket.SerializableLayer, 0, 10)
+				return &x
+			},
+		},
 	}
 
 	return pr
@@ -116,7 +124,7 @@ func (p *Prober) Config() *Config {
 func (p *Prober) Start() error {
 	err := p.init()
 	if err != nil {
-		return fmt.Errorf("Failed to init: %v", err)
+		return fmt.Errorf("failed to init: %v", err)
 	}
 
 	go p.rttTimeoutChecker()
@@ -150,12 +158,12 @@ func (p *Prober) getSrcAddr(s uint64) net.IP {
 func (p *Prober) init() error {
 	err := p.initRawSocket()
 	if err != nil {
-		return fmt.Errorf("Unable to initialize RAW socket: %v", err)
+		return fmt.Errorf("unable to initialize RAW socket: %v", err)
 	}
 
 	err = p.initUDPSocket()
 	if err != nil {
-		return fmt.Errorf("Unable to initialize UDP socket: %v", err)
+		return fmt.Errorf("unable to initialize UDP socket: %v", err)
 	}
 
 	return nil
