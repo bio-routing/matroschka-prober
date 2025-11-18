@@ -94,7 +94,7 @@ func TestCraftPacket(t *testing.T) {
 	tests := []struct {
 		name     string
 		prober   *Prober
-		pr       *probe
+		pr       probe
 		expected []byte
 	}{
 		{
@@ -117,7 +117,7 @@ func TestCraftPacket(t *testing.T) {
 				localAddr:  net.IP{10, 255, 3, 1},
 				dstUDPPort: 9090,
 			},
-			pr: &probe{
+			pr: probe{
 				TimeStamp:      0,
 				SequenceNumber: 5,
 			},
@@ -143,7 +143,7 @@ func TestCraftPacket(t *testing.T) {
 				localAddr:  net.IP{0x20, 0x1, 0xD, 0xB8, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
 				dstUDPPort: 9090,
 			},
-			pr: &probe{
+			pr: probe{
 				TimeStamp:      0,
 				SequenceNumber: 8,
 			},
