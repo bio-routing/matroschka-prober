@@ -32,7 +32,7 @@ func (p *Prober) sender() {
 
 		pr.SequenceNumber = seq
 		pr.TimeStamp = time.Now().UnixNano()
-		pkt, err := p.craftPacket(&pr)
+		pkt, err := p.craftPacket(pr)
 		if err != nil {
 			log.Errorf("Unable to craft packet: %v", err)
 			continue
@@ -70,7 +70,7 @@ func (p *Prober) sendPacket(payload []byte, src net.IP, dst net.IP) error {
 	}
 
 	if err := p.rawConn.WriteTo(payload, options); err != nil {
-		return fmt.Errorf("Unable to send packet: %v", err)
+		return fmt.Errorf("unable to send packet: %v", err)
 	}
 
 	return nil

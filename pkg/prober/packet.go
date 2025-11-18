@@ -41,11 +41,11 @@ func (p *Prober) getIPVersion() (int8, error) {
 	for i := range firstHop {
 		malformedAddress = malformedAddress + strconv.Itoa(int(firstHop[i])) + "."
 	}
-	return 0, fmt.Errorf("Couldn't determine the protocol version for address %s", malformedAddress)
+	return 0, fmt.Errorf("couldn't determine the protocol version for address %s", malformedAddress)
 
 }
 
-func (p *Prober) craftIPV4Packet(pr *probe, l []gopacket.SerializableLayer) ([]gopacket.SerializableLayer, error) {
+func (p *Prober) craftIPV4Packet(sequenceNumber uint64, l []gopacket.SerializableLayer) ([]gopacket.SerializableLayer, error) {
 	l = append(l, &layers.GRE{
 		Protocol: layers.EthernetTypeIPv4,
 	})
@@ -56,8 +56,8 @@ func (p *Prober) craftIPV4Packet(pr *probe, l []gopacket.SerializableLayer) ([]g
 		}
 
 		l = append(l, &layers.IPv4{
-			SrcIP:    p.getSrcAddrHop(i, pr.SequenceNumber),
-			DstIP:    p.getDstAddr(i, pr.SequenceNumber),
+			SrcIP:    p.getSrcAddrHop(i, sequenceNumber),
+			DstIP:    p.getDstAddr(i, sequenceNumber),
 			Version:  4,
 			Protocol: layers.IPProtocolGRE,
 			TOS:      p.cfg.TOS.Value,
@@ -71,7 +71,7 @@ func (p *Prober) craftIPV4Packet(pr *probe, l []gopacket.SerializableLayer) ([]g
 
 	// Create final UDP packet that will return
 	ip := &layers.IPv4{
-		SrcIP:    p.getSrcAddrHop(len(p.cfg.Hops), pr.SequenceNumber),
+		SrcIP:    p.getSrcAddrHop(len(p.cfg.Hops), sequenceNumber),
 		DstIP:    p.localAddr,
 		Version:  4,
 		Protocol: layers.IPProtocolUDP,
@@ -94,7 +94,7 @@ func (p *Prober) craftIPV4Packet(pr *probe, l []gopacket.SerializableLayer) ([]g
 	return l, nil
 }
 
-func (p *Prober) craftIPV6Packet(pr *probe, l []gopacket.SerializableLayer) ([]gopacket.SerializableLayer, error) {
+func (p *Prober) craftIPV6Packet(sequenceNumber uint64, l []gopacket.SerializableLayer) ([]gopacket.SerializableLayer, error) {
 	l = append(l, &layers.GRE{
 		Protocol: layers.EthernetTypeIPv6,
 	})
@@ -105,8 +105,8 @@ func (p *Prober) craftIPV6Packet(pr *probe, l []gopacket.SerializableLayer) ([]g
 		}
 
 		l = append(l, &layers.IPv6{
-			SrcIP:        p.getSrcAddrHop(i, pr.SequenceNumber),
-			DstIP:        p.getDstAddr(i, pr.SequenceNumber),
+			SrcIP:        p.getSrcAddrHop(i, sequenceNumber),
+			DstIP:        p.getDstAddr(i, sequenceNumber),
 			Version:      6,
 			TrafficClass: p.cfg.TOS.Value,
 			NextHeader:   layers.IPProtocolGRE,
@@ -120,7 +120,7 @@ func (p *Prober) craftIPV6Packet(pr *probe, l []gopacket.SerializableLayer) ([]g
 	}
 
 	ip := &layers.IPv6{
-		SrcIP:        p.getSrcAddrHop(len(p.cfg.Hops), pr.SequenceNumber),
+		SrcIP:        p.getSrcAddrHop(len(p.cfg.Hops), sequenceNumber),
 		DstIP:        p.localAddr,
 		Version:      6,
 		TrafficClass: p.cfg.TOS.Value,
@@ -143,7 +143,7 @@ func (p *Prober) craftIPV6Packet(pr *probe, l []gopacket.SerializableLayer) ([]g
 	return l, nil
 }
 
-func (p *Prober) craftPacket(pr *probe) ([]byte, error) {
+func (p *Prober) craftPacket(pr probe) ([]byte, error) {
 	probeSer := pr.marshal()
 
 	buf := gopacket.NewSerializeBuffer()
@@ -157,14 +157,14 @@ func (p *Prober) craftPacket(pr *probe) ([]byte, error) {
 	var err error
 	ipProtocolVersion := p.cfg.IPVersion
 	if ipProtocolVersion == 4 {
-		l, err = p.craftIPV4Packet(pr, l)
+		l, err = p.craftIPV4Packet(pr.SequenceNumber, l)
 		if err != nil {
 			return nil, fmt.Errorf("failed to craft IPv4 packet: %w", err)
 		}
 	}
 
 	if ipProtocolVersion == 6 {
-		l, err = p.craftIPV6Packet(pr, l)
+		l, err = p.craftIPV6Packet(pr.SequenceNumber, l)
 		if err != nil {
 			return nil, fmt.Errorf("failed to craft IPv6 packet: %w", err)
 		}
