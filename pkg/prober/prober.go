@@ -3,121 +3,86 @@ package prober
 import (
 	"fmt"
 	"net"
-	"slices"
 	"sync"
 	"time"
 
 	"github.com/bio-routing/matroschka-prober/pkg/measurement"
-	"github.com/google/gopacket"
+	"github.com/bio-routing/matroschka-prober/pkg/target"
 )
 
-const (
-	mtuMax = uint16(9216)
-)
-
-// Prober keeps the state of a prober instance. There is one instance per probed path.
 type Prober struct {
-	cfg                   Config
-	dstUDPPort            uint16
-	localAddr             net.IP
-	clock                 clock
-	mtu                   uint16
-	payload               gopacket.Payload
-	probesReceived        uint64
-	probesSent            uint64
-	rawConn               rawSocket // Used to send GRE packets
-	stop                  chan struct{}
-	transitProbes         *transitProbes // Keeps track of in-flight packets
-	udpConn               udpSocket      // Used to receive returning packets
-	measurements          *measurement.MeasurementsDB
-	latePackets           uint64
-	serializableLayerPool sync.Pool
-}
-
-// Config is the configuration of a prober
-type Config struct {
-	Name                string
-	BasePort            uint16
-	ConfiguredSrcAddr   net.IP
-	SrcAddrs            []net.IP
-	Hops                []Hop
-	StaticLabels        []Label
-	TOS                 TOS
-	PPS                 uint64
-	PayloadSizeBytes    uint64
-	MeasurementLengthMS uint64
-	TimeoutMS           uint64
-	IPVersion           uint8
-}
-
-func (c *Config) Equal(b *Config) bool {
-	if c == nil && b == nil {
-		return true
-	}
-	if c == nil || b == nil {
-		return false
-	}
-	return c.ConfiguredSrcAddr.Equal(b.ConfiguredSrcAddr) &&
-		c.MeasurementLengthMS == b.MeasurementLengthMS &&
-		c.PPS == b.PPS &&
-		c.PayloadSizeBytes == b.PayloadSizeBytes &&
-		c.TimeoutMS == b.TimeoutMS &&
-		hopListsEqual(c.Hops, b.Hops) &&
-		slices.Equal(c.StaticLabels, b.StaticLabels)
-}
-
-func hopListsEqual(a, b []Hop) bool {
-	return slices.EqualFunc(a, b, func(a, b Hop) bool {
-		return a.Name == b.Name && ipListsEqual(a.SrcRange, b.SrcRange) && ipListsEqual(a.DstRange, b.DstRange)
-	})
-}
-
-func ipListsEqual(a, b []net.IP) bool {
-	return slices.EqualFunc(a, b, func(a, b net.IP) bool {
-		return a.Equal(b)
-	})
-}
-
-// TOS represents a type of service mapping
-type TOS struct {
-	Name  string
-	Value uint8
-}
-
-// Hop represents a hop on a path to be probed
-type Hop struct {
-	Name     string
-	DstRange []net.IP
-	SrcRange []net.IP
-}
-
-func (h *Hop) getAddr(s uint64) net.IP {
-	return h.DstRange[s%uint64(len(h.DstRange))]
+	clock             clock
+	stop              chan struct{}
+	rawConn4          rawSocket // Used to send GRE packets for IPv4
+	rawConn6          rawSocket // Used to send GRE packets for IPv6
+	proberAddr4       net.IP
+	proberAddr6       net.IP
+	basePort          uint16
+	udpPort           uint16
+	udpConn           udpSocket // Used to receive returning packets
+	probesReceived    uint64
+	probesSent        uint64
+	targets           map[target.TargetID]*target.Target
+	targetsMu         sync.RWMutex
+	pps               uint64
+	transitProbes     *transitProbes
+	measurements      *measurement.MeasurementsDB
+	measurementLength time.Duration
 }
 
 // New creates a new prober
-func New(c Config) *Prober {
+func New(pps uint64, basePort uint16, proberAddr4 net.IP, proberAddr6 net.IP, measurementLength time.Duration) *Prober {
 	pr := &Prober{
-		cfg:           c,
-		clock:         realClock{},
-		mtu:           mtuMax,
-		transitProbes: newTransitProbes(),
-		measurements:  measurement.NewDB(),
-		stop:          make(chan struct{}),
-		payload:       make(gopacket.Payload, c.PayloadSizeBytes),
-		serializableLayerPool: sync.Pool{
-			New: func() any {
-				x := make([]gopacket.SerializableLayer, 0, 10)
-				return &x
-			},
-		},
+		basePort:          basePort,
+		clock:             realClock{},
+		stop:              make(chan struct{}),
+		proberAddr4:       proberAddr4,
+		proberAddr6:       proberAddr6,
+		udpPort:           basePort + 1,
+		targets:           make(map[target.TargetID]*target.Target),
+		pps:               pps,
+		transitProbes:     newTransitProbes(),
+		measurements:      measurement.NewDB(),
+		measurementLength: measurementLength,
 	}
 
 	return pr
 }
 
-func (p *Prober) Config() *Config {
-	return &p.cfg
+func (p *Prober) Configure(targetConfigs []target.TargetConfig) error {
+	p.targetsMu.Lock()
+	defer p.targetsMu.Unlock()
+
+	for _, tc := range targetConfigs {
+		laddr, err := getLocalAddr(tc.Hops[0].GetAddr(0))
+		if err != nil {
+			return fmt.Errorf("unable to get local address for target %q: %v", tc.Name, err)
+		}
+
+		t, err := target.NewTarget(tc, laddr)
+		if err != nil {
+			return fmt.Errorf("unable to create target %q: %v", tc.Name, err)
+		}
+		p.targets[tc.GetID()] = t
+	}
+
+	return nil
+}
+
+func getLocalAddr(dest net.IP) (net.IP, error) {
+	conn, err := net.Dial("udp", net.JoinHostPort(dest.String(), "123"))
+	if err != nil {
+		return nil, fmt.Errorf("dial failed: %v", err)
+	}
+
+	conn.Close()
+
+	host, _, err := net.SplitHostPort(conn.LocalAddr().String())
+	if err != nil {
+		return nil, fmt.Errorf("unable to split host and port: %v", err)
+	}
+
+	return net.ParseIP(host), nil
 }
 
 // Start starts the prober
@@ -146,13 +111,18 @@ func (p *Prober) cleaner() {
 			return
 		default:
 			time.Sleep(time.Second)
-			p.measurements.RemoveOlder(p.lastFinishedMeasurement())
+			p.cleanup()
 		}
 	}
 }
 
-func (p *Prober) getSrcAddr(s uint64) net.IP {
-	return p.cfg.SrcAddrs[s%uint64(len(p.cfg.SrcAddrs))]
+func (p *Prober) cleanup() {
+	p.targetsMu.Lock()
+	defer p.targetsMu.Unlock()
+
+	for _, t := range p.targets {
+		p.measurements.RemoveOlder(p.lastFinishedMeasurement(t))
+	}
 }
 
 func (p *Prober) init() error {

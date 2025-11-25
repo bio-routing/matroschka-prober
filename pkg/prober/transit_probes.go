@@ -3,40 +3,53 @@ package prober
 import (
 	"fmt"
 	"sync"
+	"time"
+
+	"github.com/bio-routing/matroschka-prober/pkg/target"
 )
 
+type transitProbe struct {
+	target    *target.Target
+	timestamp int64
+}
+
 type transitProbes struct {
-	m map[uint64]int64 // index is the sequence number, value is the timestamp
+	m map[uint64]transitProbe // index is the sequence number
 	l sync.RWMutex
 }
 
-func (t *transitProbes) add(p *probe) {
+func (t *transitProbes) add(target *target.Target, p *target.Probe) {
 	t.l.Lock()
 	defer t.l.Unlock()
-	t.m[p.SequenceNumber] = p.TimeStamp
+	t.m[p.SequenceNumber] = transitProbe{
+		target:    target,
+		timestamp: p.TimeStampUnixNano,
+	}
 }
 
-func (t *transitProbes) remove(seq uint64) error {
+func (t *transitProbes) remove(seq uint64) (*target.Target, error) {
 	t.l.Lock()
 
 	if _, ok := t.m[seq]; !ok {
 		t.l.Unlock()
-		return fmt.Errorf("Sequence number %d not found", seq)
+		return nil, fmt.Errorf("sequence number %d not found", seq)
 	}
 
+	tp := t.m[seq]
 	delete(t.m, seq)
 	t.l.Unlock()
-	return nil
+
+	return tp.target, nil
 }
 
-func (t *transitProbes) getLt(lt int64) map[uint64]struct{} {
-	ret := make(map[uint64]struct{})
+func (t *transitProbes) getLt(lt time.Time) []uint64 {
+	ret := make([]uint64, 0)
 	t.l.RLock()
 	defer t.l.RUnlock()
 
-	for seq, ts := range t.m {
-		if ts < lt {
-			ret[seq] = struct{}{}
+	for seq, tp := range t.m {
+		if tp.timestamp < lt.UnixNano() {
+			ret = append(ret, seq)
 		}
 	}
 
@@ -45,6 +58,6 @@ func (t *transitProbes) getLt(lt int64) map[uint64]struct{} {
 
 func newTransitProbes() *transitProbes {
 	return &transitProbes{
-		m: make(map[uint64]int64),
+		m: make(map[uint64]transitProbe),
 	}
 }

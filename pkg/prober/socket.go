@@ -10,9 +10,8 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-const (
-	maxPort = uint16(65535)
-)
+const ttl = 64
+const maxPort = 65535
 
 type rawSocket interface {
 	WriteTo(payload []byte, options writeOptions) error
@@ -40,12 +39,12 @@ func newRawSockWrapper() (*rawSockWrapper, error) {
 	greProtoStr := strconv.FormatInt(unix.IPPROTO_GRE, 10)
 	c, err := net.ListenPacket("ip4:"+greProtoStr, "0.0.0.0") // GRE for IPv4
 	if err != nil {
-		return nil, fmt.Errorf("Unable to listen for GRE packets: %v", err)
+		return nil, fmt.Errorf("unable to listen for GRE packets: %v", err)
 	}
 
 	rc, err := ipv4.NewRawConn(c)
 	if err != nil {
-		return nil, fmt.Errorf("Unable to create raw connection: %v", err)
+		return nil, fmt.Errorf("unable to create raw connection: %v", err)
 	}
 
 	return &rawSockWrapper{
@@ -82,27 +81,18 @@ type udpSockWrapper struct {
 	port    uint16
 }
 
-func newUDPSockWrapper(basePort uint16) (*udpSockWrapper, error) {
+func newUDPSockWrapper(port uint16) (*udpSockWrapper, error) {
 	var udpConn *net.UDPConn
 
-	port := basePort
-	// Try to find a free UDP port
-	for {
-		udpAddr, err := net.ResolveUDPAddr("udp", fmt.Sprintf(":%d", port))
-		if err != nil {
-			return nil, fmt.Errorf("Unable to resolve address: %v", err)
-		}
+	udpAddr, err := net.ResolveUDPAddr("udp", fmt.Sprintf(":%d", port))
+	if err != nil {
+		return nil, fmt.Errorf("unable to resolve address: %v", err)
+	}
 
-		udpConn, err = net.ListenUDP("udp", udpAddr)
-		if err != nil {
-			//log.Debugf("UDP port %d is busy. Trying next one.", port)
-			port++
-			if port > maxPort {
-				return nil, fmt.Errorf("Unable to listen for UDP packets: %v", err)
-			}
-			continue
-		}
-		break
+	udpConn, err = net.ListenUDP("udp", udpAddr)
+	if err != nil {
+		return nil, fmt.Errorf("unable to listen for UDP packets: %v", err)
+
 	}
 
 	return &udpSockWrapper{
@@ -124,69 +114,36 @@ func (u *udpSockWrapper) Close() error {
 }
 
 func (p *Prober) initRawSocket() error {
-	ipVersion := p.cfg.IPVersion
-
-	if ipVersion == 4 {
-		rc, err := newRawSockWrapper()
-		if err != nil {
-			return fmt.Errorf("Unable to create rack socket wrapper: %v", err)
-		}
-
-		p.rawConn = rc
+	rc4, err := newRawSockWrapper()
+	if err != nil {
+		return fmt.Errorf("unable to create rack socket wrapper: %v", err)
 	}
 
-	if ipVersion == 6 {
-		rc, err := newIPv6RawSockWrapper()
-		if err != nil {
-			return fmt.Errorf("Unable to create rack socket wrapper: %v", err)
-		}
+	p.rawConn4 = rc4
 
-		p.rawConn = rc
+	rc6, err := newIPv6RawSockWrapper()
+	if err != nil {
+		return fmt.Errorf("unable to create rack socket wrapper: %v", err)
 	}
+
+	p.rawConn6 = rc6
 
 	return nil
 }
 
 func (p *Prober) initUDPSocket() error {
-	s, err := newUDPSockWrapper(p.cfg.BasePort)
-	if err != nil {
-		return fmt.Errorf("Unable to get UDP socket wrapper: %v", err)
-	}
+	for i := 0; i < maxPort; i++ {
+		s, err := newUDPSockWrapper(p.basePort + uint16(i))
+		if err != nil {
+			continue
+		}
 
-	p.udpConn = s
-	p.dstUDPPort = s.getPort()
-	return nil
-}
-
-func (p *Prober) setLocalAddr() error {
-	if p.cfg.ConfiguredSrcAddr != nil {
-		p.localAddr = p.cfg.ConfiguredSrcAddr
+		p.udpPort = p.basePort + uint16(i)
+		p.udpConn = s
 		return nil
 	}
 
-	addr, err := getLocalAddr(p.cfg.Hops[0].DstRange[0])
-	if err != nil {
-		return fmt.Errorf("Unable to get local address: %v", err)
-	}
-
-	p.localAddr = addr
-	return nil
-}
-
-func getLocalAddr(dest net.IP) (net.IP, error) {
-	conn, err := net.Dial("udp", fmt.Sprintf("%s:123", dest.String()))
-	if err != nil {
-		return nil, fmt.Errorf("Dial failed: %v", err)
-	}
-
-	conn.Close()
-
-	host, _, err := net.SplitHostPort(conn.LocalAddr().String())
-	if err != nil {
-		return nil, fmt.Errorf("Unable to split host and port: %v", err)
-	}
-
-	return net.ParseIP(host), nil
+	return fmt.Errorf("unable to find free UDP port")
 }
 
 type rawIPv6SocketWrapper struct {
@@ -215,7 +172,7 @@ func newIPv6RawSockWrapper() (*rawIPv6SocketWrapper, error) {
 	greProtoStr := strconv.FormatInt(unix.IPPROTO_GRE, 10)
 	c, err := net.ListenPacket("ip6:"+greProtoStr, "::")
 	if err != nil {
-		return nil, fmt.Errorf("Unable to listen for GRE packets: %v", err)
+		return nil, fmt.Errorf("unable to listen for GRE packets: %v", err)
 	}
 
 	rc := ipv6.NewPacketConn(c)

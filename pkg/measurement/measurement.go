@@ -4,6 +4,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/bio-routing/matroschka-prober/pkg/target"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -19,52 +20,65 @@ type Measurement struct {
 
 // MeasurementsDB manages measurements
 type MeasurementsDB struct {
-	m map[int64]*Measurement
+	m map[int64]map[*target.Target]*Measurement
 	l sync.RWMutex
 }
 
 // NewDB creates a new measurements database
 func NewDB() *MeasurementsDB {
 	return &MeasurementsDB{
-		m: make(map[int64]*Measurement),
+		m: make(map[int64]map[*target.Target]*Measurement),
 	}
 }
 
 // AddSent adds a sent probe to the db
-func (m *MeasurementsDB) AddSent(ts int64) {
+func (m *MeasurementsDB) AddSent(t *target.Target, ts int64) {
 	m.l.Lock()
 
 	if m.m[ts] == nil {
-		m.m[ts] = &Measurement{
-			RTTs: make([]uint64, 0),
-		}
+		m.m[ts] = make(map[*target.Target]*Measurement)
 	}
-	m.m[ts].Sent++
 
+	if m.m[ts][t] == nil {
+		m.m[ts][t] = &Measurement{}
+	}
+
+	m.m[ts][t].Sent++
 	m.l.Unlock() // This is not defered for performance reason
 }
 
 // AddRecv adds a received probe to the db
-func (m *MeasurementsDB) AddRecv(sentTsNS int64, rtt uint64, measurementDurationMS uint64) {
+func (m *MeasurementsDB) AddRecv(sentTsNS int64, rtt uint64, t *target.Target) {
 	m.l.RLock()
 
-	allignedTs := sentTsNS - sentTsNS%int64(measurementDurationMS*uint64(time.Millisecond))
+	allignedTs := sentTsNS - sentTsNS%int64(t.Config().MeasurementLengthMS*uint64(time.Millisecond))
 	if _, ok := m.m[allignedTs]; !ok {
 		log.Debugf("Received probe at %d sent at %d with rtt %d after bucket %d was removed. Now=%d", sentTsNS+int64(rtt), sentTsNS, allignedTs, rtt, time.Now().UnixNano())
 		m.l.RUnlock() // This is not defered for performance reason
 		return
 	}
 
-	m.m[allignedTs].Received++
-	m.m[allignedTs].RTTs = append(m.m[allignedTs].RTTs, rtt)
-	m.m[allignedTs].RTTSum += rtt
-
-	if rtt < m.m[allignedTs].RTTMin || m.m[allignedTs].RTTMin == 0 {
-		m.m[allignedTs].RTTMin = rtt
+	if m.m[allignedTs] == nil {
+		m.l.RUnlock()
+		return
 	}
 
-	if rtt > m.m[allignedTs].RTTMax {
-		m.m[allignedTs].RTTMax = rtt
+	if m.m[allignedTs][t] == nil {
+		m.l.RUnlock()
+		return
+	}
+
+	me := m.m[allignedTs][t]
+	me.Received++
+	me.RTTs = append(me.RTTs, rtt)
+	me.RTTSum += rtt
+
+	if rtt < me.RTTMin || me.RTTMin == 0 {
+		me.RTTMin = rtt
+	}
+
+	if rtt > me.RTTMax {
+		me.RTTMax = rtt
 	}
 
 	m.l.RUnlock() // This is not defered for performance reason
@@ -83,7 +97,7 @@ func (m *MeasurementsDB) RemoveOlder(ts int64) {
 }
 
 // Get get's the measurement at ts
-func (m *MeasurementsDB) Get(ts int64) *Measurement {
+func (m *MeasurementsDB) Get(ts int64, t *target.Target) *Measurement {
 	m.l.RLock()
 	defer m.l.RUnlock()
 
@@ -91,6 +105,5 @@ func (m *MeasurementsDB) Get(ts int64) *Measurement {
 		return nil
 	}
 
-	ret := *m.m[ts]
-	return &ret
+	return m.m[ts][t]
 }
