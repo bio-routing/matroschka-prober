@@ -28,10 +28,11 @@ type Prober struct {
 	transitProbes     *transitProbes
 	measurements      *measurement.MeasurementsDB
 	measurementLength time.Duration
+	rmem              int
 }
 
 // New creates a new prober
-func New(pps uint64, basePort uint16, proberAddr4 net.IP, proberAddr6 net.IP, measurementLength time.Duration) *Prober {
+func New(pps uint64, basePort uint16, proberAddr4 net.IP, proberAddr6 net.IP, measurementLength time.Duration, rmem int) *Prober {
 	pr := &Prober{
 		basePort:          basePort,
 		clock:             realClock{},
@@ -44,6 +45,7 @@ func New(pps uint64, basePort uint16, proberAddr4 net.IP, proberAddr6 net.IP, me
 		transitProbes:     newTransitProbes(),
 		measurements:      measurement.NewDB(),
 		measurementLength: measurementLength,
+		rmem:              rmem,
 	}
 
 	return pr

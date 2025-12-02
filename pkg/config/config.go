@@ -63,6 +63,9 @@ type Config struct {
 	// description: |
 	//   List of routers used as explicit hops in the path.
 	Routers []Router `yaml:"routers,omitempty"`
+	// decription: |
+	//	 Socket receive buffer size in bytes.
+	Rmem int `yaml:"rmem,omitempty"`
 }
 
 // Defaults represents the default section of the config
