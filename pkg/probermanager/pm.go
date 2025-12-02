@@ -20,15 +20,17 @@ type ProberManager struct {
 	proberAddr4 net.IP
 	proberAddr6 net.IP
 	timeout     time.Duration
+	rmem        int
 }
 
-func New(basePort uint16, proberAddr4 net.IP, proberAddr6 net.IP, timeout time.Duration) *ProberManager {
+func New(basePort uint16, proberAddr4 net.IP, proberAddr6 net.IP, timeout time.Duration, rmem int) *ProberManager {
 	return &ProberManager{
 		probers:     make(map[uint64][]*prober.Prober),
 		basePort:    basePort,
 		proberAddr4: proberAddr4,
 		proberAddr6: proberAddr6,
 		timeout:     timeout,
+		rmem:        rmem,
 	}
 }
 
@@ -42,7 +44,7 @@ func (pm *ProberManager) GetProbers(pps uint64) ([]*prober.Prober, error) {
 
 	pm.probers[pps] = make([]*prober.Prober, 0, runtime.GOMAXPROCS(0))
 	for i := 0; i < runtime.GOMAXPROCS(0); i++ {
-		p := prober.New(pps, pm.basePort, pm.proberAddr4, pm.proberAddr6, pm.timeout)
+		p := prober.New(pps, pm.basePort, pm.proberAddr4, pm.proberAddr6, pm.timeout, pm.rmem)
 		err := p.Start()
 		if err != nil {
 			return nil, fmt.Errorf("unable to start prober: %v", err)

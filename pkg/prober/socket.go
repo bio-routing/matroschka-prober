@@ -81,7 +81,7 @@ type udpSockWrapper struct {
 	port    uint16
 }
 
-func newUDPSockWrapper(port uint16) (*udpSockWrapper, error) {
+func newUDPSockWrapper(port uint16, rmem int) (*udpSockWrapper, error) {
 	var udpConn *net.UDPConn
 
 	udpAddr, err := net.ResolveUDPAddr("udp", fmt.Sprintf(":%d", port))
@@ -92,17 +92,19 @@ func newUDPSockWrapper(port uint16) (*udpSockWrapper, error) {
 	udpConn, err = net.ListenUDP("udp", udpAddr)
 	if err != nil {
 		return nil, fmt.Errorf("unable to listen for UDP packets: %v", err)
+	}
 
+	if rmem > 0 {
+		err = udpConn.SetReadBuffer(rmem)
+		if err != nil {
+			return nil, fmt.Errorf("unable to set UDP socket receive buffer size: %v", err)
+		}
 	}
 
 	return &udpSockWrapper{
 		udpConn: udpConn,
 		port:    port,
 	}, nil
-}
-
-func (u *udpSockWrapper) getPort() uint16 {
-	return u.port
 }
 
 func (u *udpSockWrapper) Read(b []byte) (int, error) {
@@ -133,7 +135,7 @@ func (p *Prober) initRawSocket() error {
 
 func (p *Prober) initUDPSocket() error {
 	for i := 0; i < maxPort; i++ {
-		s, err := newUDPSockWrapper(p.basePort + uint16(i))
+		s, err := newUDPSockWrapper(p.basePort+uint16(i), p.rmem)
 		if err != nil {
 			continue
 		}

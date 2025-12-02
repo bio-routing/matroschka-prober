@@ -46,7 +46,7 @@ func main() {
 		log.Fatalf("unable to get configured IPv6 source address: %v", err)
 	}
 
-	pm := probermanager.New(*cfg.BasePort, v4Src, v6Src, time.Second)
+	pm := probermanager.New(*cfg.BasePort, v4Src, v6Src, time.Second, cfg.Rmem)
 	err = pm.Configure(cfg)
 	if err != nil {
 		log.Errorf("reconfiguration failed: %v", err)
