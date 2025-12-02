@@ -13,3 +13,4 @@ paths:
   - name: core01.fra01
     hops:
       - core01.fra01
+    return_afi: 6

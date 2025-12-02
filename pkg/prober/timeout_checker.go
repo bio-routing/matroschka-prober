@@ -7,17 +7,17 @@ import (
 )
 
 func (p *Prober) rttTimeoutChecker() {
-	t := time.NewTicker(time.Duration(p.cfg.MeasurementLengthMS) * time.Millisecond)
+	t := time.NewTicker(p.measurementLength)
 
 	for {
 		select {
 		case <-p.stop:
 			return
 		case <-t.C:
-			timeout := p.cfg.MeasurementLengthMS * uint64(time.Millisecond)
-			maxTS := (uint64(time.Now().UnixNano()) - 3*timeout)
-			for seq := range p.transitProbes.getLt(int64(maxTS)) {
-				err := p.transitProbes.remove(seq)
+			now := time.Now()
+			maxTS := now.Add(-3 * p.measurementLength)
+			for _, seq := range p.transitProbes.getLt(maxTS) {
+				_, err := p.transitProbes.remove(seq)
 				if err != nil {
 					log.Infof("Probe %d timeouted: Unable to remove: %v", seq, err)
 				}

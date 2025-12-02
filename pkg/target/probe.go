@@ -1,4 +1,4 @@
-package prober
+package target
 
 import (
 	"bytes"
@@ -30,26 +30,26 @@ func getEndianNess() binary.ByteOrder {
 	return binary.BigEndian
 }
 
-type probe struct {
-	SequenceNumber uint64
-	TimeStamp      int64
+type Probe struct {
+	SequenceNumber    uint64
+	TimeStampUnixNano int64
 }
 
-func unmarshal(data []byte) (*probe, error) {
-	p := &probe{}
+func Unmarshal(data []byte) (*Probe, error) {
+	p := &Probe{}
 	err := binary.Read(bytes.NewReader(data), binary.BigEndian, p)
 	if err != nil {
-		return nil, fmt.Errorf("Unable to unmarshal read packet: %v", err)
+		return nil, fmt.Errorf("unable to unmarshal read packet: %v", err)
 	}
 
 	return p, nil
 }
 
-func (p *probe) marshal() [16]byte {
+func (p *Probe) marshal() [16]byte {
 	sn := Uint64Byte(p.SequenceNumber)
 	toBigEndian(sn[:])
 
-	ts := Int64Byte(p.TimeStamp)
+	ts := Int64Byte(p.TimeStampUnixNano)
 	toBigEndian(ts[:])
 
 	return [16]byte{
@@ -76,4 +76,10 @@ func toBigEndian(a []byte) {
 		a[i] = a[len(a)-i-1]
 		a[len(a)-i-1] = tmp
 	}
+}
+
+// TOS represents a type of service mapping
+type TOS struct {
+	Name  string
+	Value uint8
 }

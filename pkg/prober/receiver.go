@@ -4,13 +4,18 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/bio-routing/matroschka-prober/pkg/target"
 	log "github.com/sirupsen/logrus"
+)
+
+const (
+	mtuMax = uint16(9216)
 )
 
 func (p *Prober) receiver() {
 	defer p.udpConn.Close()
 
-	recvBuffer := make([]byte, p.mtu)
+	recvBuffer := make([]byte, mtuMax)
 	for {
 		select {
 		case <-p.stop:
@@ -27,31 +32,31 @@ func (p *Prober) receiver() {
 
 		atomic.AddUint64(&p.probesReceived, 1)
 
-		pkt, err := unmarshal(recvBuffer)
+		pkt, err := target.Unmarshal(recvBuffer)
 		if err != nil {
 			log.Errorf("Unable to unmarshal message: %v", err)
 			return
 		}
 
-		err = p.transitProbes.remove(pkt.SequenceNumber)
+		target, err := p.transitProbes.remove(pkt.SequenceNumber)
 		if err != nil {
 			// Probe was count as lost, so we ignore it from here on
 			continue
 		}
 
-		rtt := now - pkt.TimeStamp
-		if p.timedOut(rtt) {
+		rtt := now - pkt.TimeStampUnixNano
+		if p.timedOut(rtt, target) {
 			// Probe arrived late. rttTimoutChecker() will clean up after it. So we ignore it from here on
-			atomic.AddUint64(&p.latePackets, 1)
+			target.LatePacket()
 			continue
 		}
 
-		p.measurements.AddRecv(pkt.TimeStamp, uint64(rtt), p.cfg.MeasurementLengthMS)
+		p.measurements.AddRecv(pkt.TimeStampUnixNano, uint64(rtt), target)
 	}
 }
 
-func (p *Prober) timedOut(s int64) bool {
-	return s > int64(msToNS(p.cfg.TimeoutMS))
+func (p *Prober) timedOut(s int64, target *target.Target) bool {
+	return s > int64(msToNS(target.Config().TimeoutMS))
 }
 
 func msToNS(s uint64) uint64 {

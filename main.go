@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"time"
 
 	"gopkg.in/yaml.v2"
 
@@ -30,6 +31,33 @@ func main() {
 	}
 	log.SetLevel(level)
 
+	cfg, err := loadConfig(*cfgFilepath)
+	if err != nil {
+		log.Fatalf("Unable to load config: %v", err)
+	}
+
+	v4Src, err := cfg.GetConfiguredSrcAddr4()
+	if err != nil {
+		log.Fatalf("unable to get configured IPv4 source address: %v", err)
+	}
+
+	v6Src, err := cfg.GetConfiguredSrcAddr6()
+	if err != nil {
+		log.Fatalf("unable to get configured IPv6 source address: %v", err)
+	}
+
+	pm := probermanager.New(*cfg.BasePort, v4Src, v6Src, time.Second)
+	err = pm.Configure(cfg)
+	if err != nil {
+		log.Errorf("reconfiguration failed: %v", err)
+	}
+	fe := frontend.New(&frontend.Config{
+		Version:       cfg.Version,
+		MetricsPath:   *cfg.MetricsPath,
+		ListenAddress: cfg.ListenAddress.String(),
+	}, pm)
+	go fe.Start()
+
 	w, err := inotify.NewWatcher()
 	if err != nil {
 		log.Fatalf("unable to create inotify watcher: %v", err)
@@ -40,25 +68,6 @@ func main() {
 		log.Fatalf("failed to watch file %q: %v", *cfgFilepath, err)
 	}
 
-	pm := probermanager.New()
-
-	cfg, err := loadConfig(*cfgFilepath)
-	if err != nil {
-		log.Fatalf("Unable to load config: %v", err)
-	}
-
-	err = pm.Configure(cfg)
-	if err != nil {
-		log.Errorf("reconfiguration failed: %v", err)
-	}
-
-	fe := frontend.New(&frontend.Config{
-		Version:       cfg.Version,
-		MetricsPath:   *cfg.MetricsPath,
-		ListenAddress: cfg.ListenAddress.String(),
-	}, pm)
-	go fe.Start()
-
 	for {
 		e := <-w.Events
 
@@ -67,7 +76,6 @@ func main() {
 		}
 
 		log.Infof("Config has changed: reloading")
-
 		cfg, err := loadConfig(*cfgFilepath)
 		if err != nil {
 			log.Errorf("unable to reload config: %v", err)
@@ -76,7 +84,7 @@ func main() {
 
 		err = pm.Configure(cfg)
 		if err != nil {
-			log.Errorf("reconfiguration failed: %v", err)
+			log.Fatalf("reconfiguration failed: %v", err)
 		}
 	}
 }
@@ -84,13 +92,13 @@ func main() {
 func loadConfig(path string) (*config.Config, error) {
 	cfgFile, err := os.ReadFile(path)
 	if err != nil {
-		return nil, fmt.Errorf("Unable to read file %q: %v", path, err)
+		return nil, fmt.Errorf("unable to read file %q: %v", path, err)
 	}
 
 	cfg := &config.Config{}
 	err = yaml.Unmarshal(cfgFile, cfg)
 	if err != nil {
-		return nil, fmt.Errorf("Unable to unmarshal: %v", err)
+		return nil, fmt.Errorf("unable to unmarshal: %v", err)
 	}
 
 	err = cfg.ApplyDefaults()

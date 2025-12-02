@@ -5,8 +5,8 @@ import (
 	"math/big"
 	"net"
 	"net/netip"
+	"slices"
 
-	"github.com/bio-routing/matroschka-prober/pkg/prober"
 	"github.com/pkg/errors"
 )
 
@@ -128,6 +128,9 @@ type Path struct {
 	// description: |
 	//   custom labels to expose
 	Labels map[string]string `yaml:"labels,omitempty"`
+	// description: |
+	//   Address family of packet returning to prober. 4 for IPv4, 6 for IPv6. If not set, the prober will use the AFI of the first hop.
+	ReturnAFI uint8 `yaml:"return_afi,omitempty"`
 }
 
 // Router represents a router used a an explicit hop in a path
@@ -147,6 +150,28 @@ type Router struct {
 	SrcRangeStr string `yaml:"src_range,omitempty"`
 	// docgen:nodoc
 	SrcRange *net.IPNet `yaml:"-"`
+}
+
+type Hop struct {
+	Name     string
+	DstRange []net.IP
+	SrcRange []net.IP
+}
+
+func (h *Hop) GetAddr(s uint64) net.IP {
+	return h.DstRange[s%uint64(len(h.DstRange))]
+}
+
+func HopListsEqual(a, b []Hop) bool {
+	return slices.EqualFunc(a, b, func(a, b Hop) bool {
+		return a.Name == b.Name && IPListsEqual(a.SrcRange, b.SrcRange) && IPListsEqual(a.DstRange, b.DstRange)
+	})
+}
+
+func IPListsEqual(a, b []net.IP) bool {
+	return slices.EqualFunc(a, b, func(a, b net.IP) bool {
+		return a.Equal(b)
+	})
 }
 
 // Validate validates a configuration
@@ -279,14 +304,21 @@ func (d *Defaults) applyDefaults() error {
 }
 
 // GetConfiguredSrcAddr gets an IPv4 address of the configured src interface
-func (c *Config) GetConfiguredSrcAddr() (net.IP, error) {
+func (c *Config) GetConfiguredSrcAddr4() (net.IP, error) {
 	if c.Defaults.SrcInterface == nil {
 		return nil, nil
 	}
 
-	ipVersion := GetIPVersion(c.SrcRange)
+	return GetInterfaceAddr(*c.Defaults.SrcInterface, 4)
+}
 
-	return GetInterfaceAddr(*c.Defaults.SrcInterface, ipVersion)
+// GetConfiguredSrcAddr gets an IPv4 address of the configured src interface
+func (c *Config) GetConfiguredSrcAddr6() (net.IP, error) {
+	if c.Defaults.SrcInterface == nil {
+		return nil, nil
+	}
+
+	return GetInterfaceAddr(*c.Defaults.SrcInterface, 6)
 }
 
 func GetIPVersion(network *net.IPNet) uint8 {
@@ -330,8 +362,8 @@ func GetInterfaceAddr(ifName string, ipVersion uint8) (net.IP, error) {
 }
 
 // PathToProberHops generates prober hops
-func (c *Config) PathToProberHops(pathCfg Path) ([]prober.Hop, error) {
-	res := make([]prober.Hop, 0)
+func (c *Config) PathToProberHops(pathCfg Path) ([]Hop, error) {
+	res := make([]Hop, 0)
 
 	for _, hop := range pathCfg.Hops {
 		r := getRouter(c.Routers, hop)
@@ -339,7 +371,7 @@ func (c *Config) PathToProberHops(pathCfg Path) ([]prober.Hop, error) {
 			return nil, fmt.Errorf("unable to find hop %s", hop)
 		}
 
-		h := prober.Hop{
+		h := Hop{
 			Name:     r.Name,
 			DstRange: GenerateAddrs(r.DstRange),
 			SrcRange: GenerateAddrs(r.SrcRange),
@@ -512,4 +544,15 @@ func initDefaultRange(ip string) net.IPNet {
 	}
 
 	return *ipRange
+}
+
+func (c *Config) PathsByPPSRate() map[uint64][]Path {
+	res := make(map[uint64][]Path)
+
+	for _, p := range c.Paths {
+		pps := *p.PPS
+		res[pps] = append(res[pps], p)
+	}
+
+	return res
 }
