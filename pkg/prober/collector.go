@@ -20,6 +20,9 @@ func (p *Prober) Describe(ch chan<- *prometheus.Desc) {
 
 // Collect collects data from the collector and send it to prometheus
 func (p *Prober) Collect(ch chan<- prometheus.Metric) {
+	p.targetsMu.RLock()
+	defer p.targetsMu.RUnlock()
+
 	for _, t := range p.targets {
 		ts := p.lastFinishedMeasurement(t)
 		m := p.measurements.Get(ts, t)

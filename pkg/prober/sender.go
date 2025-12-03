@@ -15,7 +15,6 @@ import (
 func (p *Prober) sender() {
 	defer p.rawConn4.Close()
 	defer p.rawConn6.Close()
-	defer p.udpConn.Close()
 
 	seq := uint64(0)
 	pr := target.Probe{}
@@ -33,6 +32,9 @@ func (p *Prober) sender() {
 		for _, target := range p.targets {
 			tCfg := target.Config()
 
+			srcAddr := tCfg.GetSrcAddr(seq)
+			dstAddr := tCfg.Hops[0].GetAddr(seq)
+
 			pr.SequenceNumber = seq
 			pr.TimeStampUnixNano = time.Now().UnixNano()
 			pkt, err := target.CraftPacket(pr, p.udpPort)
@@ -40,9 +42,6 @@ func (p *Prober) sender() {
 				log.Errorf("Unable to craft packet: %v", err)
 				continue
 			}
-
-			srcAddr := tCfg.GetSrcAddr(seq)
-			dstAddr := tCfg.Hops[0].GetAddr(seq)
 
 			p.transitProbes.add(target, &pr)
 

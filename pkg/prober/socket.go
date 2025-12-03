@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"net"
 	"strconv"
+	"time"
+	"unsafe"
 
 	"golang.org/x/net/ipv4"
 	"golang.org/x/net/ipv6"
@@ -27,7 +29,7 @@ type writeOptions struct {
 }
 
 type udpSocket interface {
-	Read([]byte) (int, error)
+	Read([]byte) (int, *time.Time, error)
 	Close() error
 }
 
@@ -53,7 +55,6 @@ func newRawSockWrapper() (*rawSockWrapper, error) {
 }
 
 func (s *rawSockWrapper) WriteTo(p []byte, o writeOptions) error {
-
 	iph := &ipv4.Header{
 		Src:      o.src,
 		Dst:      o.dst,
@@ -77,42 +78,69 @@ func (s *rawSockWrapper) Close() error {
 }
 
 type udpSockWrapper struct {
-	udpConn *net.UDPConn
-	port    uint16
+	sockfd int
+	port   uint16
 }
 
 func newUDPSockWrapper(port uint16, rmem int) (*udpSockWrapper, error) {
-	var udpConn *net.UDPConn
-
-	udpAddr, err := net.ResolveUDPAddr("udp", fmt.Sprintf(":%d", port))
+	sockfd, err := unix.Socket(unix.AF_INET, unix.SOCK_DGRAM, unix.IPPROTO_UDP)
 	if err != nil {
-		return nil, fmt.Errorf("unable to resolve address: %v", err)
+		return nil, fmt.Errorf("unable to create UDP socket: %v", err)
 	}
 
-	udpConn, err = net.ListenUDP("udp", udpAddr)
+	err = unix.SetsockoptInt(sockfd, unix.SOL_SOCKET, unix.SO_TIMESTAMPNS, 1)
 	if err != nil {
-		return nil, fmt.Errorf("unable to listen for UDP packets: %v", err)
+		return nil, fmt.Errorf("unable to set SO_TIMESTAMP on UDP socket: %v", err)
 	}
 
 	if rmem > 0 {
-		err = udpConn.SetReadBuffer(rmem)
+		err = unix.SetsockoptInt(sockfd, unix.SOL_SOCKET, unix.SO_RCVBUF, rmem)
 		if err != nil {
 			return nil, fmt.Errorf("unable to set UDP socket receive buffer size: %v", err)
 		}
 	}
 
+	err = unix.Bind(sockfd, &unix.SockaddrInet4{
+		Port: int(port),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("unable to bind UDP socket to port %d: %v", port, err)
+	}
+
 	return &udpSockWrapper{
-		udpConn: udpConn,
-		port:    port,
+		sockfd: sockfd,
+		port:   port,
 	}, nil
 }
 
-func (u *udpSockWrapper) Read(b []byte) (int, error) {
-	return u.udpConn.Read(b)
+func (u *udpSockWrapper) Read(b []byte) (int, *time.Time, error) {
+	oob := make([]byte, 1024)
+	n, oobn, _, _, err := unix.Recvmsg(u.sockfd, b, oob, 0)
+	if err != nil {
+		return n, nil, fmt.Errorf("recvmsg failed: %w", err)
+	}
+
+	cmsgs, err := unix.ParseSocketControlMessage(oob[:oobn])
+	if err != nil {
+		return n, nil, fmt.Errorf("unable to parse socket control message: %v", err)
+	}
+
+	var ts *time.Time
+	for _, cmsg := range cmsgs {
+		if cmsg.Header.Level == unix.SOL_SOCKET && cmsg.Header.Type == unix.SO_TIMESTAMPNS {
+			tspecRaw := [16]byte{}
+			copy(tspecRaw[:], cmsg.Data[:16])
+			tspec := (*unix.Timespec)(unsafe.Pointer(&tspecRaw))
+			rxTS := time.Unix(int64(tspec.Sec), int64(tspec.Nsec))
+			ts = &rxTS
+		}
+	}
+
+	return n, ts, nil
 }
 
 func (u *udpSockWrapper) Close() error {
-	return u.udpConn.Close()
+	return unix.Close(u.sockfd)
 }
 
 func (p *Prober) initRawSocket() error {
@@ -134,7 +162,7 @@ func (p *Prober) initRawSocket() error {
 }
 
 func (p *Prober) initUDPSocket() error {
-	for i := 0; i < maxPort; i++ {
+	for i := range maxPort {
 		s, err := newUDPSockWrapper(p.basePort+uint16(i), p.rmem)
 		if err != nil {
 			continue
