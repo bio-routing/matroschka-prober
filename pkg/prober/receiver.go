@@ -23,8 +23,12 @@ func (p *Prober) receiver() {
 		default:
 		}
 
-		_, err := p.udpConn.Read(recvBuffer)
-		now := time.Now().UnixNano()
+		_, ts, err := p.udpConn.Read(recvBuffer)
+		if ts == nil {
+			now := time.Now()
+			ts = &now
+		}
+
 		if err != nil {
 			log.Errorf("Unable to read from UDP socket: %v", err)
 			return
@@ -44,7 +48,7 @@ func (p *Prober) receiver() {
 			continue
 		}
 
-		rtt := now - pkt.TimeStampUnixNano
+		rtt := ts.UnixNano() - pkt.TimeStampUnixNano
 		if p.timedOut(rtt, target) {
 			// Probe arrived late. rttTimoutChecker() will clean up after it. So we ignore it from here on
 			target.LatePacket()
