@@ -20,6 +20,10 @@ type Measurement struct {
 }
 
 func (m *Measurement) copy() *Measurement {
+	if m == nil {
+		return nil
+	}
+
 	return &Measurement{
 		Sent:     m.Sent,
 		Received: m.Received,
