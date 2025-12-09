@@ -28,7 +28,7 @@ func (p *Prober) sender() {
 		case <-ticker.C:
 		}
 
-		p.targetsMu.Lock()
+		p.targetsMu.RLock()
 		for _, target := range p.targets {
 			tCfg := target.Config()
 
@@ -62,7 +62,7 @@ func (p *Prober) sender() {
 			atomic.AddUint64(&p.probesSent, 1)
 			seq++
 		}
-		p.targetsMu.Unlock()
+		p.targetsMu.RUnlock()
 	}
 }
 

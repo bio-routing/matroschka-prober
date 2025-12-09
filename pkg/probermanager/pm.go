@@ -123,6 +123,9 @@ func splitTargetConfigs(targets []target.TargetConfig, nGroups int) [][]target.T
 
 func (pm *ProberManager) GetCollectors() []prometheus.Collector {
 	ret := make([]prometheus.Collector, 0)
+	pm.probersMu.RLock()
+	defer pm.probersMu.RUnlock()
+
 	for _, probers := range pm.probers {
 		for _, p := range probers {
 			ret = append(ret, p)

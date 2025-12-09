@@ -55,6 +55,7 @@ func (p *Prober) Configure(targetConfigs []target.TargetConfig) error {
 	p.targetsMu.Lock()
 	defer p.targetsMu.Unlock()
 
+	p.targets = make(map[target.TargetID]*target.Target, len(targetConfigs))
 	for _, tc := range targetConfigs {
 		laddr, err := getLocalAddr(tc.Hops[0].GetAddr(0))
 		if err != nil {
