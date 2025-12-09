@@ -49,7 +49,7 @@ func (p *Prober) receiver() {
 		}
 
 		rtt := ts.UnixNano() - pkt.TimeStampUnixNano
-		if p.timedOut(rtt, target) {
+		if target.TimedOut(rtt) {
 			// Probe arrived late. rttTimoutChecker() will clean up after it. So we ignore it from here on
 			target.LatePacket()
 			continue
@@ -57,12 +57,4 @@ func (p *Prober) receiver() {
 
 		p.measurements.AddRecv(pkt.TimeStampUnixNano, uint64(rtt), target)
 	}
-}
-
-func (p *Prober) timedOut(s int64, target *target.Target) bool {
-	return s > int64(msToNS(target.Config().TimeoutMS))
-}
-
-func msToNS(s uint64) uint64 {
-	return s * 1000000
 }

@@ -14,9 +14,8 @@ type Label struct {
 }
 
 type TargetID struct {
-	Path      string
-	IPVersion uint8
-	TOS       TOS
+	Path string
+	TOS  TOS
 }
 
 // Target keeps the state of a target instance. There is one instance per probed path.
@@ -73,10 +72,6 @@ func (c *TargetConfig) Equal(b *TargetConfig) bool {
 		slices.Equal(c.StaticLabels, b.StaticLabels)
 }
 
-func (t *Target) SetLocalAddr(addr net.IP) {
-	t.localAddr = addr
-}
-
 func (t *Target) LatePacket() {
 	atomic.AddUint64(&t.latePackets, 1)
 }
@@ -86,24 +81,24 @@ func (t *Target) GetLatePackets() uint64 {
 }
 
 func (t *Target) Labels() []string {
-	keys := make([]string, len(t.cfg.StaticLabels)+2)
-	for i, l := range t.cfg.StaticLabels {
-		keys[i] = l.Key
+	keys := make([]string, 0, len(t.cfg.StaticLabels)+2)
+	for _, l := range t.cfg.StaticLabels {
+		keys = append(keys, l.Key)
 	}
 
-	keys[len(keys)-2] = "tos"
-	keys[len(keys)-1] = "path"
+	keys = append(keys, "tos")
+	keys = append(keys, "path")
 	return keys
 }
 
 func (t *Target) LabelValues() []string {
-	values := make([]string, len(t.cfg.StaticLabels)+2)
-	for i, l := range t.cfg.StaticLabels {
-		values[i] = l.Value
+	values := make([]string, 0, len(t.cfg.StaticLabels)+2)
+	for _, l := range t.cfg.StaticLabels {
+		values = append(values, l.Value)
 	}
 
-	values[len(values)-2] = t.cfg.TOS.Name
-	values[len(values)-1] = t.cfg.Name
+	values = append(values, t.cfg.TOS.Name)
+	values = append(values, t.cfg.Name)
 	return values
 }
 
@@ -141,4 +136,12 @@ func convertLabels(kv map[string]string) []Label {
 		})
 	}
 	return labels
+}
+
+func (t *Target) TimedOut(s int64) bool {
+	return s > int64(msToNS(t.Config().TimeoutMS))
+}
+
+func msToNS(s uint64) uint64 {
+	return s * 1000000
 }

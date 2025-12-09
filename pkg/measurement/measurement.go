@@ -1,6 +1,7 @@
 package measurement
 
 import (
+	"slices"
 	"sync"
 	"time"
 
@@ -16,6 +17,17 @@ type Measurement struct {
 	RTTMin   uint64
 	RTTMax   uint64
 	RTTs     []uint64
+}
+
+func (m *Measurement) copy() *Measurement {
+	return &Measurement{
+		Sent:     m.Sent,
+		Received: m.Received,
+		RTTSum:   m.RTTSum,
+		RTTMin:   m.RTTMin,
+		RTTMax:   m.RTTMax,
+		RTTs:     slices.Clone(m.RTTs),
+	}
 }
 
 // MeasurementsDB manages measurements
@@ -105,5 +117,5 @@ func (m *MeasurementsDB) Get(ts int64, t *target.Target) *Measurement {
 		return nil
 	}
 
-	return m.m[ts][t]
+	return m.m[ts][t].copy()
 }
