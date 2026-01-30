@@ -154,19 +154,28 @@ func (u *udpSockWrapper) Close() error {
 }
 
 func (p *Prober) initRawSocket() (err error) {
-	rc4, err := newRawSockWrapper()
-	if err != nil {
-		return fmt.Errorf("unable to create rack socket wrapper: %v", err)
-	}
+	var rc4 *rawSockWrapper
+	var rc6 *rawIPv6SocketWrapper
+
 	defer func() {
-		if err != nil && rc4 != nil {
-			rc4.Close()
+		if err != nil {
+			if rc4 != nil {
+				rc4.Close()
+			}
+			if rc6 != nil {
+				rc6.Close()
+			}
 		}
 	}()
 
+	rc4, err = newRawSockWrapper()
+	if err != nil {
+		return fmt.Errorf("unable to create rack socket wrapper: %v", err)
+	}
+
 	p.rawConn4 = rc4
 
-	rc6, err := newIPv6RawSockWrapper()
+	rc6, err = newIPv6RawSockWrapper()
 	if err != nil {
 		return fmt.Errorf("unable to create rack socket wrapper: %v", err)
 	}
