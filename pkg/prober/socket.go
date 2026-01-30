@@ -37,12 +37,17 @@ type rawSockWrapper struct {
 	rawConn *ipv4.RawConn
 }
 
-func newRawSockWrapper() (*rawSockWrapper, error) {
+func newRawSockWrapper() (wrapper *rawSockWrapper, err error) {
 	greProtoStr := strconv.FormatInt(unix.IPPROTO_GRE, 10)
 	c, err := net.ListenPacket("ip4:"+greProtoStr, "0.0.0.0") // GRE for IPv4
 	if err != nil {
 		return nil, fmt.Errorf("unable to listen for GRE packets: %v", err)
 	}
+	defer func() {
+		if err != nil {
+			c.Close()
+		}
+	}()
 
 	rc, err := ipv4.NewRawConn(c)
 	if err != nil {
@@ -82,11 +87,16 @@ type udpSockWrapper struct {
 	port   uint16
 }
 
-func newUDPSockWrapper(port uint16, rmem int) (*udpSockWrapper, error) {
+func newUDPSockWrapper(port uint16, rmem int) (wrapper *udpSockWrapper, err error) {
 	sockfd, err := unix.Socket(unix.AF_INET, unix.SOCK_DGRAM, unix.IPPROTO_UDP)
 	if err != nil {
 		return nil, fmt.Errorf("unable to create UDP socket: %v", err)
 	}
+	defer func() {
+		if err != nil {
+			unix.Close(sockfd)
+		}
+	}()
 
 	err = unix.SetsockoptInt(sockfd, unix.SOL_SOCKET, unix.SO_TIMESTAMPNS, 1)
 	if err != nil {
@@ -143,11 +153,16 @@ func (u *udpSockWrapper) Close() error {
 	return unix.Close(u.sockfd)
 }
 
-func (p *Prober) initRawSocket() error {
+func (p *Prober) initRawSocket() (err error) {
 	rc4, err := newRawSockWrapper()
 	if err != nil {
 		return fmt.Errorf("unable to create rack socket wrapper: %v", err)
 	}
+	defer func() {
+		if err != nil && rc4 != nil {
+			rc4.Close()
+		}
+	}()
 
 	p.rawConn4 = rc4
 
