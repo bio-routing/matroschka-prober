@@ -46,16 +46,20 @@ func main() {
 		log.Fatalf("unable to get configured IPv6 source address: %v", err)
 	}
 
+	reloadFailed := config.NewReloadFailed()
+
 	pm := probermanager.New(*cfg.BasePort, v4Src, v6Src, time.Second, cfg.Rmem)
 	err = pm.Configure(cfg)
 	if err != nil {
 		log.Errorf("reconfiguration failed: %v", err)
+		reloadFailed.SetFailed()
 	}
+
 	fe := frontend.New(&frontend.Config{
 		Version:       cfg.Version,
 		MetricsPath:   *cfg.MetricsPath,
 		ListenAddress: cfg.ListenAddress.String(),
-	}, pm)
+	}, pm, reloadFailed)
 	go fe.Start()
 
 	w, err := inotify.NewWatcher()
@@ -79,6 +83,7 @@ func main() {
 		cfg, err := loadConfig(*cfgFilepath)
 		if err != nil {
 			log.Errorf("unable to reload config: %v", err)
+			reloadFailed.SetFailed()
 			continue
 		}
 
@@ -86,6 +91,8 @@ func main() {
 		if err != nil {
 			log.Fatalf("reconfiguration failed: %v", err)
 		}
+
+		reloadFailed.SetOK()
 	}
 }
 
