@@ -24,15 +24,17 @@ type Config struct {
 
 // Frontend represents an HTTP prometheus interface
 type Frontend struct {
-	cfg       *Config
-	proberReg ProberRegistry
+	cfg        *Config
+	proberReg  ProberRegistry
+	collectors []prometheus.Collector
 }
 
 // New creates a new HTTP frontend
-func New(cfg *Config, proberReg ProberRegistry) *Frontend {
+func New(cfg *Config, proberReg ProberRegistry, collectors ...prometheus.Collector) *Frontend {
 	return &Frontend{
-		cfg:       cfg,
-		proberReg: proberReg,
+		cfg:        cfg,
+		proberReg:  proberReg,
+		collectors: collectors,
 	}
 }
 
@@ -60,6 +62,9 @@ func (fe *Frontend) handleMetricsRequest(w http.ResponseWriter, r *http.Request)
 	reg := prometheus.NewRegistry()
 	for _, p := range fe.proberReg.GetCollectors() {
 		reg.MustRegister(p)
+	}
+	for _, c := range fe.collectors {
+		reg.MustRegister(c)
 	}
 
 	promhttp.HandlerFor(reg, promhttp.HandlerOpts{
