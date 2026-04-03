@@ -128,11 +128,21 @@ func (p *Prober) cleanup() {
 	}
 }
 
-func (p *Prober) init() error {
-	err := p.initRawSocket()
+func (p *Prober) init() (err error) {
+	err = p.initRawSocket()
 	if err != nil {
 		return fmt.Errorf("unable to initialize RAW socket: %v", err)
 	}
+	defer func() {
+		if err != nil {
+			if p.rawConn4 != nil {
+				p.rawConn4.Close()
+			}
+			if p.rawConn6 != nil {
+				p.rawConn6.Close()
+			}
+		}
+	}()
 
 	err = p.initUDPSocket()
 	if err != nil {
