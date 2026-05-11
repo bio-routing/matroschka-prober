@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"path/filepath"
 	"time"
 
 	"gopkg.in/yaml.v2"
@@ -67,15 +68,26 @@ func main() {
 		log.Fatalf("unable to create inotify watcher: %v", err)
 	}
 
-	err = w.Add(*cfgFilepath)
+	// Watch the parent directory rather than the config file itself: inotify
+	// watches are bound to inodes, so an atomic rename
+	// would orphan a watch on the file and silently break
+	// reloads. Watching the directory lets us see Create/Write/Rename events
+	// for the replacement file.
+	cfgDir, cfgName := filepath.Split(*cfgFilepath)
+	if cfgDir == "" {
+		cfgDir = "."
+	}
+	err = w.Add(cfgDir)
 	if err != nil {
-		log.Fatalf("failed to watch file %q: %v", *cfgFilepath, err)
+		log.Fatalf("failed to watch directory %q: %v", cfgDir, err)
 	}
 
-	for {
-		e := <-w.Events
+	for e := range w.Events {
+		if filepath.Base(e.Name) != cfgName {
+			continue
+		}
 
-		if e.Op == inotify.Remove {
+		if e.Op&(inotify.Create|inotify.Write|inotify.Rename) == 0 {
 			continue
 		}
 
